@@ -75,13 +75,21 @@ async function api(url,method,body){
 function go(v,role){S.view=v;if(role)S.role=role;S.tmp={};render()}
 async function logout(){try{await api('/api/logout','POST')}catch(e){}S.user=null;S.role=null;go('home')}
 function lbl(loc,t){return (loc?loc[0].toFixed(5)+', '+loc[1].toFixed(5):'Location not shared')+' · '+new Date(t).toLocaleString()}
-function stamp(c,loc){const g=c.getContext('2d'),h=Math.round(c.width/24);g.fillStyle='rgba(0,0,0,.6)';g.fillRect(0,c.height-h*1.8,c.width,h*1.8);g.fillStyle='#fff';g.font=h+'px sans-serif';g.textBaseline='middle';g.fillText('📍 '+lbl(loc,Date.now()),h*.5,c.height-h*.9,c.width-h);return c.toDataURL('image/jpeg',.7)}
-function compress(f,loc){return new Promise(r=>{const i=new Image;i.onload=()=>{const k=Math.min(1,800/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);r(stamp(c,loc))};i.src=URL.createObjectURL(f)})}
+function stamp(c,loc,place){const g=c.getContext('2d'),h=Math.round(c.width/26),H=h*(place?3.6:2.1);
+ g.fillStyle='rgba(0,0,0,.65)';g.fillRect(0,c.height-H,c.width,H);g.fillStyle='#fff';g.textBaseline='middle';
+ let y=c.height-H+h*1.05;
+ if(place){g.font='600 '+h+'px sans-serif';g.fillText('📍 '+place,h*.5,y,c.width-h);y+=h*1.5}
+ g.font=(place?h*.8:h)+'px sans-serif';g.fillText((place?'':'📍 ')+lbl(loc,Date.now()),h*.5,y,c.width-h);
+ return c.toDataURL('image/jpeg',.7)}
+function compress(f,loc,place){return new Promise(r=>{const i=new Image;i.onload=()=>{const k=Math.min(1,800/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);r(stamp(c,loc,place))};i.src=URL.createObjectURL(f)})}
 function getLoc(){return new Promise(r=>{if(!navigator.geolocation)return r(null);navigator.geolocation.getCurrentPosition(p=>r([p.coords.latitude,p.coords.longitude]),()=>r(null),{enableHighAccuracy:true,timeout:8000})})}
+let GEO=null;
+async function placeName(l){try{const c=new AbortController(),t=setTimeout(()=>c.abort(),7000);const r=await fetch('/api/geocode?lat='+l[0]+'&lng='+l[1],{signal:c.signal});clearTimeout(t);return (await r.json()).name||''}catch(e){return ''}}
+function whereAmI(fresh){if(!GEO||fresh)GEO=getLoc().then(async l=>({loc:l,place:l?await placeName(l):''}));return GEO}
 let STREAM=null;
 function stopCam(){if(STREAM){STREAM.getTracks().forEach(t=>t.stop());STREAM=null}}
 async function startCam(id){stopCam();try{STREAM=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});$(id).srcObject=STREAM;return true}catch(e){stopCam();return false}}
-function grab(id,loc){const v=$(id),s=Math.min(v.videoWidth,v.videoHeight);if(!s)return null;const c=document.createElement('canvas');c.width=c.height=Math.min(s,800);c.getContext('2d').drawImage(v,(v.videoWidth-s)/2,(v.videoHeight-s)/2,s,s,0,0,c.width,c.height);return stamp(c,loc)}
+function grab(id,loc,place){const v=$(id),s=Math.min(v.videoWidth,v.videoHeight);if(!s)return null;const c=document.createElement('canvas');c.width=c.height=Math.min(s,800);c.getContext('2d').drawImage(v,(v.videoWidth-s)/2,(v.videoHeight-s)/2,s,s,0,0,c.width,c.height);return stamp(c,loc,place)}
 function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3200)}
 function zoom(s){const d=document.createElement('div');d.className='zm';d.innerHTML='<img src="'+s+'" alt="Photo">';d.onclick=()=>d.remove();document.body.appendChild(d)}
 const LBL={pending:['Waiting for worker','w'],cleaned:['⏳ Awaiting admin approval','w'],approved:['✅ Approved',''],rejected:['↩ Sent back for rework','r']};
@@ -98,45 +106,50 @@ function tiles(a){return `<div class="tiles">${a.map(t=>`<div class="tile"><b>${
 function intro(t,p,s){return `<h2>${t}</h2><p class="lead" style="font-size:16px;margin:0 0 12px">${p}</p><ol class="how">${s.map(x=>`<li>${x}</li>`).join('')}</ol>`}
 async function citizen(){
  const d=await api('/api/reports'),L=d.reports,ok=L.filter(r=>r.status==='approved').length;
- $('app').innerHTML=intro(`Hi ${esc(S.user)} 👋`,'Spot garbage on your street? Take a photo and your report reaches the cleaning team in seconds.',['Allow camera and location when your phone asks.','Point at the garbage and tap Capture. The report is sent instantly with GPS.','Track it below until the admin approves the clean-up.'])
+ $('app').innerHTML=intro(`Hi ${esc(S.user)} 👋`,'Spot garbage on your street? Take a photo and your report reaches the cleaning team in seconds.',['Allow camera and location when your phone asks.','Point at the garbage and tap Capture. Check the preview, then tap Upload.','Track it below until the admin approves the clean-up.'])
  +tiles([[L.length,'your reports'],[ok,'resolved'],[L.length-ok,'in progress']])
  +`<div class="card"><h3>📷 New report</h3>
- <div id="cam" hidden><video id="vd" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="snap()">Capture &amp; upload</button></div></div>
+ <div id="cam" hidden><video id="vd" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="snap()">Capture</button></div></div>
  <p class="muted" id="cm"></p>
  <div class="row" style="margin:8px 0"><button class="btn p" id="oc" onclick="openCam()">📷 Open camera</button><label class="btn" style="margin:0">Upload photo<input type="file" accept="image/*" hidden onchange="pick(this)"></label></div>
  <div id="gp" class="loc">📍 Checking GPS…</div><div id="pv"></div>
- <div id="fm" hidden><label>Location (area or landmark)</label><input type="text" id="ad"><label>Details (optional)</label><textarea id="ds" rows="2"></textarea><div class="row"><button class="btn p" onclick="submitReport()">Submit report</button></div></div></div>
+ <div id="fm" hidden><label>Location (you can edit)</label><input type="text" id="ad"><label>Details (optional)</label><textarea id="ds" rows="2"></textarea><div class="row"><button class="btn p" onclick="submitReport()">✅ Upload report</button><button class="btn" onclick="retake()">🔄 Retake</button></div></div></div>
  <h2>📒 My reports</h2>${L.map(r=>card(r)).join('')||'<p class="muted">No reports yet. Your first photo can change a street 🌿</p>'}`;
- getLoc().then(l=>{S.tmp.loc=l;if($('gp'))$('gp').textContent=l?'📍 GPS on: '+lbl(l,Date.now()):'📍 GPS is off. Please allow location so your photo gets tagged.'});
+ whereAmI(true).then(g=>{if($('gp'))$('gp').textContent=g.loc?'📍 '+(g.place?g.place+' · ':'')+g.loc.map(n=>n.toFixed(5)).join(', '):'📍 GPS is off. Please allow location so your photo gets tagged.'});
  openCam(true)}
 async function openCam(auto){const ok=await startCam('vd');if(!$('cam'))return;$('cam').hidden=!ok;$('oc').hidden=ok;
  $('cm').textContent=ok||!auto?'':'Camera did not open. Tap Open camera and allow permission, or upload a photo.';
  if(!ok&&!auto)alert('Camera is not available. Please allow camera permission, or use Upload photo.')}
-async function snap(){const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;const b=grab('vd',loc);if(!b)return;
- S.tmp.before=b;stopCam();$('cam').hidden=true;$('oc').hidden=false;showPv();if(loc)submitReport(true)}
-function showPv(){$('pv').innerHTML=`<img src="${S.tmp.before}" alt="Preview" style="width:100%;max-width:420px;border-radius:8px;margin-top:10px">`;$('fm').hidden=false}
-async function pick(el){if(!el.files[0])return;const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;S.tmp.before=await compress(el.files[0],loc);stopCam();$('cam').hidden=true;$('oc').hidden=false;showPv()}
-async function submitReport(auto){
- if(!S.tmp.before)return alert('Please add a photo');
- const a=auto?'':$('ad').value.trim(),loc=S.tmp.loc;
+async function here(){let g=await whereAmI();if(!g.loc)g=await whereAmI(true);return g}
+async function snap(){const g=await here(),b=grab('vd',g.loc,g.place);if(!b)return;S.tmp.before=b;S.tmp.g=g;stopCam();showPv()}
+async function pick(el){const f=el.files[0];el.value='';if(!f)return;const g=await here();S.tmp.before=await compress(f,g.loc,g.place);S.tmp.g=g;stopCam();showPv()}
+function showPv(){$('cam').hidden=true;$('oc').hidden=true;$('pv').innerHTML=`<img src="${S.tmp.before}" alt="Preview" style="width:100%;max-width:420px;border-radius:8px;margin-top:10px">`;$('ad').value=S.tmp.g.place||'';$('fm').hidden=false}
+function retake(){S.tmp.before=null;$('pv').innerHTML='';$('fm').hidden=true;$('oc').hidden=false;openCam()}
+async function submitReport(){
+ if(!S.tmp.before||S.tmp.busy)return;
+ const g=S.tmp.g||{},a=$('ad').value.trim()||g.place||'',loc=g.loc;
  if(!loc&&!a)return alert('GPS is off. Please type the location.');
- try{await api('/api/reports','POST',{before:S.tmp.before,addr:a||'GPS location',desc:auto?'':$('ds').value.trim(),lat:loc?loc[0]:null,lng:loc?loc[1]:null});S.tmp={};toast('Report sent ✅ Thank you!');render()}catch(e){alert(e.message)}}
-async function worker(noAuto){
+ S.tmp.busy=1;
+ try{await api('/api/reports','POST',{before:S.tmp.before,addr:a||'GPS location',desc:$('ds').value.trim(),lat:loc?loc[0]:null,lng:loc?loc[1]:null});S.tmp={};toast('Report sent ✅ Thank you!');render()}catch(e){S.tmp.busy=0;alert(e.message)}}
+async function worker(){
  const d=await api('/api/reports'),T=d.reports,R=d.record,c=s=>R.filter(r=>r.status===s).length;
- $('app').innerHTML=intro(`Hello ${esc(S.user)} 🧹`,'Every clean-up you finish makes a street better. Here is what is waiting for you.',['Open a job and go to the spot (tap the GPS link for the map).','Clean it up, then take the after photo right here.','The admin checks your work. The verdict and remark show in your record below.'])
+ $('app').innerHTML=intro(`Hello ${esc(S.user)} 🧹`,'Every clean-up you finish makes a street better. Here is what is waiting for you.',['Open a job and go to the spot (tap the GPS link for the map).','Clean it up, take the after photo, check the preview, then upload.','The admin checks your work. The verdict and remark show in your record below.'])
  +tiles([[T.length,'to clean'],[c('cleaned'),'awaiting approval'],[c('approved'),'approved']])
  +`<h2>🗑️ To clean</h2>${T.map(r=>card(r,`<div id="cw${r.id}"><div class="row" style="margin:12px 0 0"><button class="btn p" onclick="wcam(${r.id})">📷 Take after photo</button><label class="btn" style="margin:0">Upload photo<input type="file" accept="image/*" hidden onchange="done(${r.id},this)"></label></div></div>`)).join('')||'<p class="muted">All clear! No jobs waiting. Take a break ☕</p>'}
  <h2>📒 My work record</h2>${R.map(r=>card(r)).join('')||'<p class="muted">Your finished jobs will appear here with before and after photos and the admin’s verdict.</p>'}`;
- getLoc().then(l=>S.tmp.loc=l);
- if(!noAuto&&T.length)wcam(T[0].id,true)}
-async function wcam(id,auto){const b=$('cw'+id);if(!b)return;stopCam();
+ whereAmI(true)}
+function wbox(id){const b=$('cw'+id);if(!b)return null;stopCam();
  const p=S.cur&&S.cur!==id?$('cw'+S.cur):null;if(p&&p.dataset.o)p.innerHTML=p.dataset.o;
- S.cur=id;b.dataset.o=b.innerHTML;
- b.innerHTML=`<video id="wv" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="wsnap(${id})">Capture &amp; submit</button><button class="btn" onclick="stopCam();worker(1)">Cancel</button></div>`;
- if(!await startCam('wv')){if(!auto)alert('Camera is not available. Please allow camera permission, or use Upload photo.');worker(1)}}
-async function wsnap(id){const loc=S.tmp.loc||await getLoc(),a=grab('wv',loc);if(!a)return;stopCam();send(id,a,loc)}
-async function done(id,el){if(!el.files[0])return;const loc=S.tmp.loc||await getLoc();send(id,await compress(el.files[0],loc),loc)}
-async function send(id,after,loc){try{await api('/api/reports/'+id+'/clean','POST',{after,lat:loc?loc[0]:null,lng:loc?loc[1]:null});toast('After photo submitted ✅ Waiting for admin');render()}catch(e){alert(e.message)}}
+ S.cur=id;if(!b.dataset.o)b.dataset.o=b.innerHTML;return b}
+async function wcam(id){const b=wbox(id);if(!b)return;
+ b.innerHTML=`<video id="wv" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="wsnap(${id})">Capture</button><button class="btn" onclick="stopCam();worker()">Cancel</button></div>`;
+ if(!await startCam('wv')){alert('Camera is not available. Please allow camera permission, or use Upload photo.');worker()}}
+async function wsnap(id){const g=await here(),a=grab('wv',g.loc,g.place);if(!a)return;stopCam();wprev(id,a,g)}
+async function done(id,el){const f=el.files[0];el.value='';if(!f)return;const g=await here();wprev(id,await compress(f,g.loc,g.place),g)}
+function wprev(id,img,g){const b=wbox(id);if(!b)return;S.tmp.pa={id,img,g};
+ b.innerHTML=`<img src="${img}" alt="Preview" style="width:100%;max-width:420px;border-radius:8px;margin-top:12px"><div class="row" style="margin:10px 0 0"><button class="btn p" onclick="wsend()">✅ Upload after photo</button><button class="btn" onclick="wcam(${id})">🔄 Retake</button><button class="btn" onclick="worker()">Cancel</button></div>`}
+async function wsend(){const p=S.tmp.pa;if(!p||S.tmp.busy)return;S.tmp.busy=1;
+ try{await api('/api/reports/'+p.id+'/clean','POST',{after:p.img,lat:p.g.loc?p.g.loc[0]:null,lng:p.g.loc?p.g.loc[1]:null});S.tmp={};toast('After photo submitted ✅ Waiting for admin');render()}catch(e){S.tmp.busy=0;alert(e.message)}}
 async function admin(){
  const d=await api('/api/reports'),W=d.reports,R=d.record,c=s=>R.filter(r=>r.status===s).length;
  $('app').innerHTML=intro(`Welcome, ${esc(S.user)} ✅`,'You are the quality check. Compare the before and after photos and decide if the clean-up is really done.',['Tap a photo to zoom in.','Write a remark. It is required when you send a job back, and the worker sees it in their record.','Approve to mark the report resolved, or send it back for rework.'])

@@ -2,10 +2,13 @@
 Run locally:  pip install -r requirements.txt  &&  python app.py
 """
 import hmac
+import json
 import os
 import sqlite3
 import time
-from functools import wraps
+import urllib.parse
+import urllib.request
+from functools import lru_cache, wraps
 
 from flask import Flask, g, jsonify, request, send_from_directory, session
 
@@ -229,6 +232,43 @@ def review_report(rid):
     if cur.rowcount == 0:
         return jsonify(error="Report is not waiting for approval"), 409
     return jsonify(ok=True)
+
+
+@lru_cache(maxsize=512)
+def reverse_geocode(lat, lng):
+    """Turn coordinates into a place name using OpenStreetMap Nominatim."""
+    url = "https://nominatim.openstreetmap.org/reverse?" + urllib.parse.urlencode(
+        {"format": "jsonv2", "lat": lat, "lon": lng, "zoom": 18, "addressdetails": 1}
+    )
+    req = urllib.request.Request(url, headers={"User-Agent": "CivicClean/1.0 (civic garbage reporting app)"})
+    with urllib.request.urlopen(req, timeout=6) as r:
+        d = json.load(r)
+    addr = d.get("address", {})
+    parts = []
+    for keys in (
+        ("road", "pedestrian", "footway"),
+        ("neighbourhood", "suburb", "quarter", "village", "hamlet"),
+        ("city", "town", "municipality", "county", "state_district"),
+        ("state",),
+    ):
+        for k in keys:
+            v = addr.get(k)
+            if v and v not in parts:
+                parts.append(v)
+                break
+    return ", ".join(parts) or ", ".join(d.get("display_name", "").split(",")[:3]).strip()
+
+
+@app.get("/api/geocode")
+@need("citizen", "worker", "admin")
+def geocode():
+    lat, lng = request.args.get("lat", type=float), request.args.get("lng", type=float)
+    if lat is None or lng is None or not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return jsonify(error="Bad coordinates"), 400
+    try:
+        return jsonify(name=reverse_geocode(round(lat, 4), round(lng, 4)))
+    except Exception:
+        return jsonify(name="")
 
 
 @app.get("/")
