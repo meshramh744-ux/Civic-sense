@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CivicClean</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#fdfdfc;--ink:#10302b;--muted:#4f6b63;--green:#13805a;--lime:#8a9a3a;--mint:#cbe6dc;--line:#cfe3da;--card:#fff;--red:#b3402a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1a17;--ink:#e8f3ef;--muted:#9bb5ac;--green:#3ec28f;--lime:#b5c55a;--mint:#1c3a31;--line:#24443a;--card:#142721;--red:#e57a64;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0e1a17;--ink:#e8f3ef;--muted:#9bb5ac;--green:#3ec28f;--lime:#b5c55a;--mint:#1c3a31;--line:#24443a;--card:#142721;--red:#e57a64;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif}
+.wrap{max-width:960px;margin:0 auto;padding:0 24px 60px}
+nav{display:flex;justify-content:space-between;align-items:center;padding:24px 0;gap:12px;flex-wrap:wrap}
+.logo{font:600 22px "Space Grotesk",sans-serif;cursor:pointer}.logo span{color:var(--green)}
+nav a{font:500 15px "Space Grotesk",sans-serif;color:var(--ink);cursor:pointer;margin-left:20px}
+.eyebrow{font:600 12px "Space Grotesk",sans-serif;letter-spacing:.14em;color:var(--green);margin-top:44px}
+h1{font:500 clamp(42px,9vw,70px)/1.05 "Space Grotesk",sans-serif;margin:14px 0 20px;letter-spacing:-.02em}
+h1 em{font-style:normal;color:var(--green);display:block}
+h2{font:500 28px "Space Grotesk",sans-serif;margin:8px 0 16px}
+.lead{font-size:18px;line-height:1.7;color:var(--muted);max-width:560px}
+.row{display:flex;gap:14px;flex-wrap:wrap;margin:28px 0 18px}
+.btn{font:600 15px "Space Grotesk",sans-serif;padding:13px 22px;border-radius:8px;border:1px solid var(--line);background:none;color:var(--ink);cursor:pointer}
+.btn.p{background:var(--green);border-color:var(--green);color:#fff}.btn.r{color:var(--red)}
+.badges{display:flex;gap:18px;font-size:13px;flex-wrap:wrap}.badges span::before{content:"✓ ";color:var(--green)}
+.pulse{margin:48px 0 0;padding:26px;background:var(--card);border-radius:10px;border-right:20px solid var(--mint);border-bottom:20px solid var(--mint)}
+.pulse small{font:600 11px "Space Grotesk",sans-serif;letter-spacing:.06em;color:var(--lime)}
+.stat{border-left:3px solid #d9e27a;padding-left:16px;margin-top:40px}
+.stat b{display:block;font:600 44px "Space Grotesk",sans-serif;color:var(--lime)}.stat span{color:var(--muted);font-size:14px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:24px;border-top:1px solid var(--line);margin-top:48px;padding-top:28px}
+.steps small{font:600 13px "Space Grotesk",sans-serif;color:var(--green)}
+.steps h3{font:500 20px "Space Grotesk",sans-serif;margin:10px 0 6px}.steps p{margin:0;color:var(--muted);font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:18px}
+label{display:block;font-size:14px;color:var(--muted);margin:14px 0 6px}
+input[type=text],input[type=password],textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+.photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:12px 0}
+.photos figure{margin:0}.photos img{width:100%;border-radius:8px;display:block;max-height:320px;object-fit:cover}
+figcaption{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--muted);margin-bottom:6px}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;background:var(--mint);color:var(--green)}
+.tag.w{color:#9a6a10;background:#f6e8c4}.muted{color:var(--muted);font-size:14px}
+.cam{width:100%;max-width:420px;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#000;display:block}.loc{font-size:13px;color:var(--muted);margin:6px 0}
+.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+</style>
+</head>
+<body>
+<div class="wrap"><nav>
+<div class="logo" onclick="go('home')">Civic<span>Clean</span></div>
+<div id="nv"></div></nav><div id="app"></div></div>
+<script>
+let S={view:'home',role:null,user:null,tmp:{}};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(url,method,body){
+ const r=await fetch(url,{method:method||'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+ const d=await r.json().catch(()=>({}));
+ if(!r.ok)throw new Error(d.error||'Something went wrong');
+ return d}
+function go(v,role){S.view=v;if(role)S.role=role;S.tmp={};render()}
+async function logout(){try{await api('/api/logout','POST')}catch(e){}S.user=null;S.role=null;go('home')}
+function lbl(loc,t){return (loc?loc[0].toFixed(5)+', '+loc[1].toFixed(5):'Location not shared')+' · '+new Date(t).toLocaleString()}
+function stamp(c,loc){const g=c.getContext('2d'),h=Math.round(c.width/24);g.fillStyle='rgba(0,0,0,.6)';g.fillRect(0,c.height-h*1.8,c.width,h*1.8);g.fillStyle='#fff';g.font=h+'px sans-serif';g.textBaseline='middle';g.fillText('📍 '+lbl(loc,Date.now()),h*.5,c.height-h*.9,c.width-h);return c.toDataURL('image/jpeg',.7)}
+function compress(f,loc){return new Promise(r=>{const i=new Image;i.onload=()=>{const k=Math.min(1,800/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);r(stamp(c,loc))};i.src=URL.createObjectURL(f)})}
+function getLoc(){return new Promise(r=>{if(!navigator.geolocation)return r(null);navigator.geolocation.getCurrentPosition(p=>r([p.coords.latitude,p.coords.longitude]),()=>r(null),{enableHighAccuracy:true,timeout:8000})})}
+const LBL={pending:['Waiting for worker','w'],cleaned:['Awaiting admin approval','w'],approved:['Resolved','']};
+function badge(r){const l=LBL[r.status];return `<span class="tag ${l[1]}">${l[0]}</span>`}
+function card(r,extra=''){return `<div class="card"><div class="top"><b>${esc(r.addr)}</b>${badge(r)}</div>
+ <p class="muted">Reported by ${esc(r.by)}<br>📍 ${r.lat!=null?`<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</a>`:'Location not shared'} · ${new Date(r.at).toLocaleString()}${r.desc?`<br>${esc(r.desc)}`:''}</p>
+ <div class="photos"><figure><figcaption>BEFORE</figcaption><img src="${r.before}" alt="Before"></figure>${r.after?`<figure><figcaption>AFTER</figcaption><img src="${r.after}" alt="After"></figure>`:''}</div>${extra}</div>`}
+async function citizen(){
+ const d=await api('/api/reports');
+ $('app').innerHTML=`<div class="card"><h2>Report garbage</h2>
+ <div class="row" style="margin:8px 0"><button class="btn p" onclick="openCam()">📷 Open camera</button><label class="btn" style="margin:0">Upload photo<input type="file" accept="image/*" hidden onchange="pick(this)"></label></div>
+ <div id="cam" hidden><video id="vd" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="snap()">Capture &amp; upload</button><button class="btn" onclick="closeCam()">Close</button></div></div>
+ <div id="gp" class="loc">📍 Checking GPS…</div><div id="pv"></div>
+ <div id="fm" hidden><label>Location (area or landmark)</label><input type="text" id="ad"><label>Details (optional)</label><textarea id="ds" rows="2"></textarea><div class="row"><button class="btn p" onclick="submitReport()">Submit report</button></div></div></div>
+ <h2>My reports</h2>${d.reports.map(r=>card(r)).join('')||'<p class="muted">No reports yet.</p>'}`;
+ getLoc().then(l=>{S.tmp.loc=l;if($('gp'))$('gp').textContent=l?'📍 GPS on: '+lbl(l,Date.now()):'📍 GPS is off. Please allow location so your photo gets tagged.'})}
+async function openCam(){try{S.tmp.st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});$('vd').srcObject=S.tmp.st;$('cam').hidden=false}catch(e){alert('Camera is not available. Please allow camera permission, or use Upload photo.')}}
+function closeCam(){if(S.tmp.st)S.tmp.st.getTracks().forEach(t=>t.stop());S.tmp.st=null;if($('cam'))$('cam').hidden=true}
+async function snap(){const v=$('vd'),s=Math.min(v.videoWidth,v.videoHeight);if(!s)return;
+ const c=document.createElement('canvas');c.width=c.height=Math.min(s,800);
+ c.getContext('2d').drawImage(v,(v.videoWidth-s)/2,(v.videoHeight-s)/2,s,s,0,0,c.width,c.height);
+ const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;S.tmp.before=stamp(c,loc);closeCam();showPv();if(loc)submitReport(true)}
+function showPv(){$('pv').innerHTML=`<img src="${S.tmp.before}" alt="Preview" style="width:100%;max-width:420px;border-radius:8px;margin-top:10px">`;$('fm').hidden=false}
+async function pick(el){if(!el.files[0])return;const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;S.tmp.before=await compress(el.files[0],loc);showPv()}
+async function submitReport(auto){
+ if(!S.tmp.before)return alert('Please add a photo');
+ const a=auto?'':$('ad').value.trim(),loc=S.tmp.loc;
+ if(!loc&&!a)return alert('GPS is off. Please type the location.');
+ try{await api('/api/reports','POST',{before:S.tmp.before,addr:a||'GPS location',desc:auto?'':$('ds').value.trim(),lat:loc?loc[0]:null,lng:loc?loc[1]:null});S.tmp={};render()}catch(e){alert(e.message)}}
+async function worker(){
+ const d=await api('/api/reports');
+ $('app').innerHTML=`<h2>Garbage to clean</h2>${d.reports.map(r=>card(r,`<label>After cleaning, upload new photo</label><input type="file" accept="image/*" capture="environment" onchange="done(${r.id},this)">`)).join('')||'<p class="muted">Nothing pending. Great work!</p>'}`}
+async function done(id,el){if(!el.files[0])return;
+ try{const loc=await getLoc(),after=await compress(el.files[0],loc);await api('/api/reports/'+id+'/clean','POST',{after,lat:loc?loc[0]:null,lng:loc?loc[1]:null});render()}catch(e){alert(e.message)}}
+async function admin(){
+ const d=await api('/api/reports');
+ $('app').innerHTML=`<h2>Approvals</h2><p class="muted">${d.pending} waiting for workers · ${d.week} resolved this week</p>
+ ${d.reports.map(r=>card(r,`<div class="row" style="margin:6px 0 0"><button class="btn p" onclick="review(${r.id},1)">Approve</button><button class="btn r" onclick="review(${r.id},0)">Send back</button></div>`)).join('')||'<p class="muted">No reports waiting for approval.</p>'}`}
+async function review(id,ok){try{await api('/api/reports/'+id+'/review','POST',{approve:!!ok});render()}catch(e){alert(e.message)}}
+async function render(){
+ $('nv').innerHTML=S.user?`<span class="muted">${esc(S.user)} (${S.role})</span><a onclick="logout()">Log out</a>`:`<a onclick="go('login','worker')">Worker access</a><a onclick="go('login','admin')">Admin access</a>`;
+ try{await ({home,login,citizen,worker,admin})[S.view]()}catch(e){if(S.user){S.user=null;S.view='login'}alert(e.message);if(S.view==='login')render()}}
+async function home(){
+ const w=(await api('/api/stats')).week;
+ $('app').innerHTML=`
+<div class="eyebrow">✦ CLEANER STREETS, TOGETHER</div>
+<h1>Report. Clean. <em>Transform.</em></h1>
+<p class="lead">One clear signal can change a neighbourhood. CivicClean connects citizens and sanitation teams to keep every corner cared for.</p>
+<div class="row"><button class="btn p" onclick="go('login','citizen')">Report garbage</button><button class="btn" onclick="go('login','citizen')">Citizen sign in</button></div>
+<div class="badges"><span>GPS verified</span><span>Human reviewed</span></div>
+<div class="pulse"><small>LIVE CIVIC PULSE</small><div class="stat"><b>${w}</b><span>reports resolved<br>this week</span></div></div>
+<div class="steps"><div><small>01</small><h3>Spot it</h3><p>Citizen uploads a photo of the garbage.</p></div><div><small>02</small><h3>Locate it</h3><p>Worker finds the spot and cleans it.</p></div><div><small>03</small><h3>Resolve it</h3><p>Admin checks before and after, then approves.</p></div></div>`}
+function login(){
+ const r=S.role,t={citizen:'Citizen sign in',worker:'Worker access',admin:'Admin access'}[r],pw={worker:'worker123',admin:'admin123'}[r];
+ $('app').innerHTML=`<div class="card" style="max-width:420px"><h2>${t}</h2>
+<label>Your name</label><input type="text" id="nm" value="${r}">
+${r!=='citizen'?`<label>Passcode</label><input type="password" id="pw" value="${pw}">`:''}
+<div class="row"><button class="btn p" onclick="doLogin()">Continue</button></div></div>`}
+async function doLogin(){
+ const n=$('nm').value.trim();if(!n)return alert('Please enter your name');
+ try{const d=await api('/api/login','POST',{role:S.role,name:n,passcode:S.role!=='citizen'?$('pw').value:''});S.user=d.name;go(S.role)}catch(e){alert(e.message)}}
+(async()=>{try{const m=await api('/api/me');if(m.name){S.user=m.name;S.role=m.role;S.view=m.role}}catch(e){}render()})();
+</script>
+</body>
+</html>
