@@ -4,6 +4,7 @@ Run locally:  pip install -r requirements.txt  &&  python app.py
 import hmac
 import json
 import os
+import re
 import sqlite3
 import time
 import urllib.parse
@@ -15,9 +16,20 @@ from flask import Flask, g, jsonify, request, send_from_directory, session
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE, "civicclean.db"))
 PASSCODES = {
-    "worker": os.environ.get("WORKER_PASSCODE", "worker123"),
+    "citizen": os.environ.get("CITIZEN_PASSCODE", "admin123"),
+    "worker": os.environ.get("WORKER_PASSCODE", "admin123"),
     "admin": os.environ.get("ADMIN_PASSCODE", "admin123"),
 }
+OWNER_EMAIL = "himanshu@gmail.com"
+OWNER_NAME = "Himanshu Meshram"
+
+
+def display_name(email):
+    if email == OWNER_EMAIL:
+        return OWNER_NAME
+    words = [w for w in re.split(r"[._\-\s]+", email.split("@")[0]) if w]
+    return " ".join(w.capitalize() for w in words) or email
+
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-secret-in-production")
@@ -58,6 +70,8 @@ def init_db():
     for c in ("remark", "reviewed_by"):
         if c not in cols:
             con.execute(f"ALTER TABLE reports ADD COLUMN {c} TEXT")
+    for col in ("by_name", "worker", "reviewed_by"):
+        con.execute(f"UPDATE reports SET {col}=? WHERE {col}='himanshumeshram'", (OWNER_NAME,))
     con.commit()
     con.close()
 
@@ -125,12 +139,13 @@ def out(r):
 def login():
     d = request.get_json(silent=True) or {}
     role = d.get("role")
-    name = str(d.get("name", "")).strip()[:40]
-    if role not in ("citizen", "worker", "admin") or not name:
-        return jsonify(error="Please enter your name"), 400
-    if role != "citizen":
-        if not hmac.compare_digest(str(d.get("passcode", "")), PASSCODES[role]):
-            return jsonify(error="Wrong passcode"), 401
+    email = str(d.get("email") or d.get("name") or "").strip().lower()[:80]
+    if role not in PASSCODES or not email:
+        return jsonify(error="Please enter your email"), 400
+    given = str(d.get("password") or "").encode()
+    if not hmac.compare_digest(given, PASSCODES[role].encode()):
+        return jsonify(error="Wrong password"), 401
+    name = display_name(email)
     db().execute(
         "INSERT INTO users(name,role,last_login) VALUES(?,?,?) "
         "ON CONFLICT(name,role) DO UPDATE SET last_login=excluded.last_login",
