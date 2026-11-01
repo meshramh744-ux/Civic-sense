@@ -45,10 +45,16 @@ def init_db():
             worker TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
             created_at INTEGER NOT NULL,
-            resolved_at INTEGER
+            resolved_at INTEGER,
+            remark TEXT,
+            reviewed_by TEXT
         );
         """
     )
+    cols = [r[1] for r in con.execute("PRAGMA table_info(reports)")]
+    for c in ("remark", "reviewed_by"):
+        if c not in cols:
+            con.execute(f"ALTER TABLE reports ADD COLUMN {c} TEXT")
     con.commit()
     con.close()
 
@@ -106,7 +112,8 @@ def out(r):
     return dict(
         id=r["id"], by=r["by_name"], addr=r["addr"], desc=r["descr"],
         lat=r["lat"], lng=r["lng"], before=r["before_img"], after=r["after_img"],
-        alat=r["after_lat"], alng=r["after_lng"], status=r["status"], at=r["created_at"],
+        status=r["status"], at=r["created_at"], worker=r["worker"],
+        remark=r["remark"], rby=r["reviewed_by"],
     )
 
 
@@ -151,17 +158,22 @@ def stats():
 @app.get("/api/reports")
 @need("citizen", "worker", "admin")
 def list_reports():
-    role = session["role"]
+    role, name, q = session["role"], session["name"], db()
+    record = []
     if role == "citizen":
-        rows = db().execute(
-            "SELECT * FROM reports WHERE by_name=? ORDER BY id DESC", (session["name"],)
-        ).fetchall()
+        rows = q.execute("SELECT * FROM reports WHERE by_name=? ORDER BY id DESC", (name,)).fetchall()
     elif role == "worker":
-        rows = db().execute("SELECT * FROM reports WHERE status='pending' ORDER BY id DESC").fetchall()
+        rows = q.execute("SELECT * FROM reports WHERE status IN ('pending','rejected') ORDER BY id DESC").fetchall()
+        record = q.execute(
+            "SELECT * FROM reports WHERE worker=? AND status IN ('cleaned','approved') ORDER BY id DESC LIMIT 100",
+            (name,),
+        ).fetchall()
     else:
-        rows = db().execute("SELECT * FROM reports WHERE status='cleaned' ORDER BY id DESC").fetchall()
-    pending = db().execute("SELECT COUNT(*) c FROM reports WHERE status='pending'").fetchone()["c"]
-    return jsonify(reports=[out(r) for r in rows], pending=pending, week=week_count())
+        rows = q.execute("SELECT * FROM reports WHERE status='cleaned' ORDER BY id DESC").fetchall()
+        record = q.execute(
+            "SELECT * FROM reports WHERE status IN ('approved','rejected') ORDER BY id DESC LIMIT 100"
+        ).fetchall()
+    return jsonify(reports=[out(r) for r in rows], record=[out(r) for r in record], week=week_count())
 
 
 @app.post("/api/reports")
@@ -189,8 +201,8 @@ def clean_report(rid):
     if not valid_img(d.get("after")):
         return jsonify(error="A valid after photo is required"), 400
     cur = db().execute(
-        "UPDATE reports SET after_img=?, after_lat=?, after_lng=?, worker=?, status='cleaned' "
-        "WHERE id=? AND status='pending'",
+        "UPDATE reports SET after_img=?, after_lat=?, after_lng=?, worker=?, status='cleaned', "
+        "remark=NULL, reviewed_by=NULL WHERE id=? AND status IN ('pending','rejected')",
         (d["after"], num(d.get("lat")), num(d.get("lng")), session["name"], rid),
     )
     db().commit()
@@ -203,12 +215,15 @@ def clean_report(rid):
 @need("admin")
 def review_report(rid):
     d = request.get_json(silent=True) or {}
+    remark = str(d.get("remark", "")).strip()[:300]
     if d.get("approve"):
-        sql = "UPDATE reports SET status='approved', resolved_at=? WHERE id=? AND status='cleaned'"
-        args = (now_ms(), rid)
+        sql = "UPDATE reports SET status='approved', resolved_at=?, remark=?, reviewed_by=? WHERE id=? AND status='cleaned'"
+        args = (now_ms(), remark or None, session["name"], rid)
     else:
-        sql = "UPDATE reports SET status='pending', after_img=NULL, worker=NULL, resolved_at=? WHERE id=? AND status='cleaned'"
-        args = (None, rid)
+        if not remark:
+            return jsonify(error="Please write a remark for the worker"), 400
+        sql = "UPDATE reports SET status='rejected', remark=?, reviewed_by=? WHERE id=? AND status='cleaned'"
+        args = (remark, session["name"], rid)
     cur = db().execute(sql, args)
     db().commit()
     if cur.rowcount == 0:

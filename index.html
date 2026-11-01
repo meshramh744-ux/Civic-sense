@@ -43,14 +43,28 @@ figcaption{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--muted
 .tag.w{color:#9a6a10;background:#f6e8c4}.muted{color:var(--muted);font-size:14px}
 .cam{width:100%;max-width:420px;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#000;display:block}.loc{font-size:13px;color:var(--muted);margin:6px 0}
 .top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.photos{grid-template-columns:repeat(2,1fr)}.photos img{aspect-ratio:1;object-fit:cover;cursor:zoom-in;max-height:none}
+.tag.r{color:var(--red);background:rgba(179,64,42,.14)}
+.remark{border-left:3px solid var(--green);background:var(--mint);padding:10px 12px;border-radius:6px;margin-top:10px;font-size:14px}
+.remark.bad{border-color:var(--red);background:rgba(179,64,42,.12)}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 20px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 10px;text-align:center}
+.tile b{display:block;font:600 28px "Space Grotesk",sans-serif;color:var(--green)}.tile span{font-size:12px;color:var(--muted)}
+.how{color:var(--muted);font-size:14px;line-height:1.7;padding-left:20px;margin:0 0 18px}
+h3{font:500 19px "Space Grotesk",sans-serif;margin:0 0 8px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:99px;z-index:60;font-size:14px;max-width:90%}
+.zm{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:50}.zm img{max-width:96%;max-height:96%}
+footer{text-align:center;color:var(--muted);font-size:13px;padding:0 0 30px}
 </style>
 </head>
 <body>
 <div class="wrap"><nav>
 <div class="logo" onclick="go('home')">Civic<span>Clean</span></div>
 <div id="nv"></div></nav><div id="app"></div></div>
+<footer>Made with ♥ by Himanshu Meshram · CivicClean</footer>
 <script>
 let S={view:'home',role:null,user:null,tmp:{}};
+const OWNER='himanshumeshram';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(url,method,body){
@@ -64,44 +78,76 @@ function lbl(loc,t){return (loc?loc[0].toFixed(5)+', '+loc[1].toFixed(5):'Locati
 function stamp(c,loc){const g=c.getContext('2d'),h=Math.round(c.width/24);g.fillStyle='rgba(0,0,0,.6)';g.fillRect(0,c.height-h*1.8,c.width,h*1.8);g.fillStyle='#fff';g.font=h+'px sans-serif';g.textBaseline='middle';g.fillText('📍 '+lbl(loc,Date.now()),h*.5,c.height-h*.9,c.width-h);return c.toDataURL('image/jpeg',.7)}
 function compress(f,loc){return new Promise(r=>{const i=new Image;i.onload=()=>{const k=Math.min(1,800/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);r(stamp(c,loc))};i.src=URL.createObjectURL(f)})}
 function getLoc(){return new Promise(r=>{if(!navigator.geolocation)return r(null);navigator.geolocation.getCurrentPosition(p=>r([p.coords.latitude,p.coords.longitude]),()=>r(null),{enableHighAccuracy:true,timeout:8000})})}
-const LBL={pending:['Waiting for worker','w'],cleaned:['Awaiting admin approval','w'],approved:['Resolved','']};
+let STREAM=null;
+function stopCam(){if(STREAM){STREAM.getTracks().forEach(t=>t.stop());STREAM=null}}
+async function startCam(id){stopCam();try{STREAM=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});$(id).srcObject=STREAM;return true}catch(e){stopCam();return false}}
+function grab(id,loc){const v=$(id),s=Math.min(v.videoWidth,v.videoHeight);if(!s)return null;const c=document.createElement('canvas');c.width=c.height=Math.min(s,800);c.getContext('2d').drawImage(v,(v.videoWidth-s)/2,(v.videoHeight-s)/2,s,s,0,0,c.width,c.height);return stamp(c,loc)}
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),3200)}
+function zoom(s){const d=document.createElement('div');d.className='zm';d.innerHTML='<img src="'+s+'" alt="Photo">';d.onclick=()=>d.remove();document.body.appendChild(d)}
+const LBL={pending:['Waiting for worker','w'],cleaned:['⏳ Awaiting admin approval','w'],approved:['✅ Approved',''],rejected:['↩ Sent back for rework','r']};
 function badge(r){const l=LBL[r.status];return `<span class="tag ${l[1]}">${l[0]}</span>`}
+function fig(s,c){return `<figure><figcaption>${c}</figcaption><img src="${s}" alt="${c}" onclick="zoom(this.src)"></figure>`}
+function remark(r){
+ if(r.status==='rejected')return `<div class="remark bad"><b>Sent back by ${esc(r.rby)}</b><br>${esc(r.remark)}</div>`;
+ if(r.status==='approved')return `<div class="remark"><b>Approved by ${esc(r.rby)}</b>${r.remark?`<br>${esc(r.remark)}`:''}</div>`;
+ return ''}
 function card(r,extra=''){return `<div class="card"><div class="top"><b>${esc(r.addr)}</b>${badge(r)}</div>
- <p class="muted">Reported by ${esc(r.by)}<br>📍 ${r.lat!=null?`<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</a>`:'Location not shared'} · ${new Date(r.at).toLocaleString()}${r.desc?`<br>${esc(r.desc)}`:''}</p>
- <div class="photos"><figure><figcaption>BEFORE</figcaption><img src="${r.before}" alt="Before"></figure>${r.after?`<figure><figcaption>AFTER</figcaption><img src="${r.after}" alt="After"></figure>`:''}</div>${extra}</div>`}
+ <p class="muted">Reported by ${esc(r.by)}${r.worker?` · Cleaned by ${esc(r.worker)}`:''}<br>📍 ${r.lat!=null?`<a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" rel="noopener">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</a>`:'Location not shared'} · ${new Date(r.at).toLocaleString()}${r.desc?`<br>${esc(r.desc)}`:''}</p>
+ <div class="photos">${fig(r.before,'BEFORE')}${r.after?fig(r.after,r.status==='rejected'?'PREVIOUS AFTER':'AFTER'):''}</div>${remark(r)}${extra}</div>`}
+function tiles(a){return `<div class="tiles">${a.map(t=>`<div class="tile"><b>${t[0]}</b><span>${t[1]}</span></div>`).join('')}</div>`}
+function intro(t,p,s){return `<h2>${t}</h2><p class="lead" style="font-size:16px;margin:0 0 12px">${p}</p><ol class="how">${s.map(x=>`<li>${x}</li>`).join('')}</ol>`}
 async function citizen(){
- const d=await api('/api/reports');
- $('app').innerHTML=`<div class="card"><h2>Report garbage</h2>
- <div class="row" style="margin:8px 0"><button class="btn p" onclick="openCam()">📷 Open camera</button><label class="btn" style="margin:0">Upload photo<input type="file" accept="image/*" hidden onchange="pick(this)"></label></div>
- <div id="cam" hidden><video id="vd" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="snap()">Capture &amp; upload</button><button class="btn" onclick="closeCam()">Close</button></div></div>
+ const d=await api('/api/reports'),L=d.reports,ok=L.filter(r=>r.status==='approved').length;
+ $('app').innerHTML=intro(`Hi ${esc(S.user)} 👋`,'Spot garbage on your street? Take a photo and your report reaches the cleaning team in seconds.',['Allow camera and location when your phone asks.','Point at the garbage and tap Capture. The report is sent instantly with GPS.','Track it below until the admin approves the clean-up.'])
+ +tiles([[L.length,'your reports'],[ok,'resolved'],[L.length-ok,'in progress']])
+ +`<div class="card"><h3>📷 New report</h3>
+ <div id="cam" hidden><video id="vd" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="snap()">Capture &amp; upload</button></div></div>
+ <p class="muted" id="cm"></p>
+ <div class="row" style="margin:8px 0"><button class="btn p" id="oc" onclick="openCam()">📷 Open camera</button><label class="btn" style="margin:0">Upload photo<input type="file" accept="image/*" hidden onchange="pick(this)"></label></div>
  <div id="gp" class="loc">📍 Checking GPS…</div><div id="pv"></div>
  <div id="fm" hidden><label>Location (area or landmark)</label><input type="text" id="ad"><label>Details (optional)</label><textarea id="ds" rows="2"></textarea><div class="row"><button class="btn p" onclick="submitReport()">Submit report</button></div></div></div>
- <h2>My reports</h2>${d.reports.map(r=>card(r)).join('')||'<p class="muted">No reports yet.</p>'}`;
- getLoc().then(l=>{S.tmp.loc=l;if($('gp'))$('gp').textContent=l?'📍 GPS on: '+lbl(l,Date.now()):'📍 GPS is off. Please allow location so your photo gets tagged.'})}
-async function openCam(){try{S.tmp.st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});$('vd').srcObject=S.tmp.st;$('cam').hidden=false}catch(e){alert('Camera is not available. Please allow camera permission, or use Upload photo.')}}
-function closeCam(){if(S.tmp.st)S.tmp.st.getTracks().forEach(t=>t.stop());S.tmp.st=null;if($('cam'))$('cam').hidden=true}
-async function snap(){const v=$('vd'),s=Math.min(v.videoWidth,v.videoHeight);if(!s)return;
- const c=document.createElement('canvas');c.width=c.height=Math.min(s,800);
- c.getContext('2d').drawImage(v,(v.videoWidth-s)/2,(v.videoHeight-s)/2,s,s,0,0,c.width,c.height);
- const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;S.tmp.before=stamp(c,loc);closeCam();showPv();if(loc)submitReport(true)}
+ <h2>📒 My reports</h2>${L.map(r=>card(r)).join('')||'<p class="muted">No reports yet. Your first photo can change a street 🌿</p>'}`;
+ getLoc().then(l=>{S.tmp.loc=l;if($('gp'))$('gp').textContent=l?'📍 GPS on: '+lbl(l,Date.now()):'📍 GPS is off. Please allow location so your photo gets tagged.'});
+ openCam(true)}
+async function openCam(auto){const ok=await startCam('vd');if(!$('cam'))return;$('cam').hidden=!ok;$('oc').hidden=ok;
+ $('cm').textContent=ok||!auto?'':'Camera did not open. Tap Open camera and allow permission, or upload a photo.';
+ if(!ok&&!auto)alert('Camera is not available. Please allow camera permission, or use Upload photo.')}
+async function snap(){const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;const b=grab('vd',loc);if(!b)return;
+ S.tmp.before=b;stopCam();$('cam').hidden=true;$('oc').hidden=false;showPv();if(loc)submitReport(true)}
 function showPv(){$('pv').innerHTML=`<img src="${S.tmp.before}" alt="Preview" style="width:100%;max-width:420px;border-radius:8px;margin-top:10px">`;$('fm').hidden=false}
-async function pick(el){if(!el.files[0])return;const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;S.tmp.before=await compress(el.files[0],loc);showPv()}
+async function pick(el){if(!el.files[0])return;const loc=S.tmp.loc||await getLoc();S.tmp.loc=loc;S.tmp.before=await compress(el.files[0],loc);stopCam();$('cam').hidden=true;$('oc').hidden=false;showPv()}
 async function submitReport(auto){
  if(!S.tmp.before)return alert('Please add a photo');
  const a=auto?'':$('ad').value.trim(),loc=S.tmp.loc;
  if(!loc&&!a)return alert('GPS is off. Please type the location.');
- try{await api('/api/reports','POST',{before:S.tmp.before,addr:a||'GPS location',desc:auto?'':$('ds').value.trim(),lat:loc?loc[0]:null,lng:loc?loc[1]:null});S.tmp={};render()}catch(e){alert(e.message)}}
-async function worker(){
- const d=await api('/api/reports');
- $('app').innerHTML=`<h2>Garbage to clean</h2>${d.reports.map(r=>card(r,`<label>After cleaning, upload new photo</label><input type="file" accept="image/*" capture="environment" onchange="done(${r.id},this)">`)).join('')||'<p class="muted">Nothing pending. Great work!</p>'}`}
-async function done(id,el){if(!el.files[0])return;
- try{const loc=await getLoc(),after=await compress(el.files[0],loc);await api('/api/reports/'+id+'/clean','POST',{after,lat:loc?loc[0]:null,lng:loc?loc[1]:null});render()}catch(e){alert(e.message)}}
+ try{await api('/api/reports','POST',{before:S.tmp.before,addr:a||'GPS location',desc:auto?'':$('ds').value.trim(),lat:loc?loc[0]:null,lng:loc?loc[1]:null});S.tmp={};toast('Report sent ✅ Thank you!');render()}catch(e){alert(e.message)}}
+async function worker(noAuto){
+ const d=await api('/api/reports'),T=d.reports,R=d.record,c=s=>R.filter(r=>r.status===s).length;
+ $('app').innerHTML=intro(`Hello ${esc(S.user)} 🧹`,'Every clean-up you finish makes a street better. Here is what is waiting for you.',['Open a job and go to the spot (tap the GPS link for the map).','Clean it up, then take the after photo right here.','The admin checks your work. The verdict and remark show in your record below.'])
+ +tiles([[T.length,'to clean'],[c('cleaned'),'awaiting approval'],[c('approved'),'approved']])
+ +`<h2>🗑️ To clean</h2>${T.map(r=>card(r,`<div id="cw${r.id}"><div class="row" style="margin:12px 0 0"><button class="btn p" onclick="wcam(${r.id})">📷 Take after photo</button><label class="btn" style="margin:0">Upload photo<input type="file" accept="image/*" hidden onchange="done(${r.id},this)"></label></div></div>`)).join('')||'<p class="muted">All clear! No jobs waiting. Take a break ☕</p>'}
+ <h2>📒 My work record</h2>${R.map(r=>card(r)).join('')||'<p class="muted">Your finished jobs will appear here with before and after photos and the admin’s verdict.</p>'}`;
+ getLoc().then(l=>S.tmp.loc=l);
+ if(!noAuto&&T.length)wcam(T[0].id,true)}
+async function wcam(id,auto){const b=$('cw'+id);if(!b)return;stopCam();
+ const p=S.cur&&S.cur!==id?$('cw'+S.cur):null;if(p&&p.dataset.o)p.innerHTML=p.dataset.o;
+ S.cur=id;b.dataset.o=b.innerHTML;
+ b.innerHTML=`<video id="wv" class="cam" autoplay playsinline muted></video><div class="row" style="margin:10px 0"><button class="btn p" onclick="wsnap(${id})">Capture &amp; submit</button><button class="btn" onclick="stopCam();worker(1)">Cancel</button></div>`;
+ if(!await startCam('wv')){if(!auto)alert('Camera is not available. Please allow camera permission, or use Upload photo.');worker(1)}}
+async function wsnap(id){const loc=S.tmp.loc||await getLoc(),a=grab('wv',loc);if(!a)return;stopCam();send(id,a,loc)}
+async function done(id,el){if(!el.files[0])return;const loc=S.tmp.loc||await getLoc();send(id,await compress(el.files[0],loc),loc)}
+async function send(id,after,loc){try{await api('/api/reports/'+id+'/clean','POST',{after,lat:loc?loc[0]:null,lng:loc?loc[1]:null});toast('After photo submitted ✅ Waiting for admin');render()}catch(e){alert(e.message)}}
 async function admin(){
- const d=await api('/api/reports');
- $('app').innerHTML=`<h2>Approvals</h2><p class="muted">${d.pending} waiting for workers · ${d.week} resolved this week</p>
- ${d.reports.map(r=>card(r,`<div class="row" style="margin:6px 0 0"><button class="btn p" onclick="review(${r.id},1)">Approve</button><button class="btn r" onclick="review(${r.id},0)">Send back</button></div>`)).join('')||'<p class="muted">No reports waiting for approval.</p>'}`}
-async function review(id,ok){try{await api('/api/reports/'+id+'/review','POST',{approve:!!ok});render()}catch(e){alert(e.message)}}
+ const d=await api('/api/reports'),W=d.reports,R=d.record,c=s=>R.filter(r=>r.status===s).length;
+ $('app').innerHTML=intro(`Welcome, ${esc(S.user)} ✅`,'You are the quality check. Compare the before and after photos and decide if the clean-up is really done.',['Tap a photo to zoom in.','Write a remark. It is required when you send a job back, and the worker sees it in their record.','Approve to mark the report resolved, or send it back for rework.'])
+ +tiles([[W.length,'waiting for review'],[c('approved'),'approved'],[c('rejected'),'sent back']])
+ +`<h2>🔍 Waiting for review</h2>${W.map(r=>card(r,`<label>Remark for the worker</label><textarea id="rm${r.id}" rows="2" placeholder="e.g. Great job! / Please clean the left corner too"></textarea><div class="row" style="margin:10px 0 0"><button class="btn p" onclick="review(${r.id},1)">✅ Approve</button><button class="btn r" onclick="review(${r.id},0)">↩ Send back</button></div>`)).join('')||'<p class="muted">Nothing to review right now. You are all caught up 🎉</p>'}
+ <h2>📒 Review record</h2>${R.map(r=>card(r)).join('')||'<p class="muted">Approved and sent-back reports will be listed here.</p>'}`}
+async function review(id,ok){const remark=(($('rm'+id)||{}).value||'').trim();
+ if(!ok&&!remark)return alert('Please write a remark so the worker knows what to fix.');
+ try{await api('/api/reports/'+id+'/review','POST',{approve:!!ok,remark});toast(ok?'Approved ✅':'Sent back to the worker');render()}catch(e){alert(e.message)}}
 async function render(){
+ stopCam();
  $('nv').innerHTML=S.user?`<span class="muted">${esc(S.user)} (${S.role})</span><a onclick="logout()">Log out</a>`:`<a onclick="go('login','worker')">Worker access</a><a onclick="go('login','admin')">Admin access</a>`;
  try{await ({home,login,citizen,worker,admin})[S.view]()}catch(e){if(S.user){S.user=null;S.view='login'}alert(e.message);if(S.view==='login')render()}}
 async function home(){
@@ -115,11 +161,12 @@ async function home(){
 <div class="pulse"><small>LIVE CIVIC PULSE</small><div class="stat"><b>${w}</b><span>reports resolved<br>this week</span></div></div>
 <div class="steps"><div><small>01</small><h3>Spot it</h3><p>Citizen uploads a photo of the garbage.</p></div><div><small>02</small><h3>Locate it</h3><p>Worker finds the spot and cleans it.</p></div><div><small>03</small><h3>Resolve it</h3><p>Admin checks before and after, then approves.</p></div></div>`}
 function login(){
- const r=S.role,t={citizen:'Citizen sign in',worker:'Worker access',admin:'Admin access'}[r],pw={worker:'worker123',admin:'admin123'}[r];
- $('app').innerHTML=`<div class="card" style="max-width:420px"><h2>${t}</h2>
-<label>Your name</label><input type="text" id="nm" value="${r}">
+ const r=S.role,I={citizen:['Citizen sign in','Your city, your voice. Sign in, snap the garbage, and the cleaning team takes it from there.'],worker:['Worker access','Ready to clean? Sign in to see the jobs waiting for you and upload your after photos.'],admin:['Admin access','Review the before and after photos, leave remarks, and approve the clean-ups.']}[r],pw={worker:'worker123',admin:'admin123'}[r];
+ $('app').innerHTML=`<div class="card" style="max-width:420px"><h2>${I[0]}</h2><p class="muted">${I[1]}</p>
+<label>Your name</label><input type="text" id="nm" value="${OWNER}">
 ${r!=='citizen'?`<label>Passcode</label><input type="password" id="pw" value="${pw}">`:''}
-<div class="row"><button class="btn p" onclick="doLogin()">Continue</button></div></div>`}
+<p class="muted">Everything is prefilled. Just tap Continue.</p>
+<div class="row" style="margin:8px 0 0"><button class="btn p" onclick="doLogin()">Continue</button></div></div>`}
 async function doLogin(){
  const n=$('nm').value.trim();if(!n)return alert('Please enter your name');
  try{const d=await api('/api/login','POST',{role:S.role,name:n,passcode:S.role!=='citizen'?$('pw').value:''});S.user=d.name;go(S.role)}catch(e){alert(e.message)}}
